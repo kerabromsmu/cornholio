@@ -33,6 +33,7 @@ License: GPL2
 
 //define('CORNHOLIO_TYPES_ARRAY','cornholio_types');
 define('CORNHOLIO','Cornholio');
+define('CORNHOLIO_LOWCASE','cornholio');
 define('CORNHOLIO_OPTIONS_TYPE_PREFIX','cornholio_fields_');
 define('CORNHOLIO_POST_TYPE_PREFIX','cornholio_type_');
 define('CORNHOLIO_TYPE_NAME', 'typename');
@@ -40,6 +41,7 @@ define('CORNHOLIO_TYPE_LABEL', 'label');
 define('CORNHOLIO_TYPE_DESC', 'description');
 define('CORNHOLIO_OPTION_PAGE_ID', 'corn-options');
 define('CORNHOLIO_OPTION_TITLE', 'Cornholio options');
+define('CORNHOLIO_OPTIONS', 'Settings');
 define('CORNHOLIO_OPTION_NEW_SECTION', 'cornholio_add_new');
 define('CORNHOLIO_NEW_SECTION_NAME', 'cornholio_new_section_name');
 define('CORNHOLIO_OPTION_NEW_NAME', 'cornholio_option_new_name');
@@ -49,22 +51,16 @@ function cornup_network_admin() {
 }
 
 function show_corn_options() {
-  $AddNew = __("Add New");
-  echo "<div class='wrap'>\n" .
-       "   <h2>Cornholio settings</h2>\n" .
-       "   <form method='post' action='options.php'>\n";
-               /* 'option_group' must match 'option_group' from register_setting call */
-               settings_fields( CORNHOLIO_OPTION_NEW_SECTION );
-               do_settings_sections( CORNHOLIO_OPTION_PAGE_ID );
-  echo "        <p class='submit'>\n" .
-       "             <input name='submit' type='submit' id='submit' class='button-primary' value='" . __("Add New") . "' />\n" .
-       "        </p>\n" .
-       "   </form>\n" .
-       "</div>\n";
+  global $title;
+  global $plugin_page;
+  $slugg = get_admin_page_parent();
+  echo "<h2>$title</h2>";
+  echo "<p>$slugg</p>";
+  echo "<p>$plugin_page</p>";
 }
 
 function cornholio_page() {
-  echo "<h3>Cornholio</h3>";
+  echo "<h2>Set up custom post types</h2>";
   $alloptions = wp_load_alloptions();
   $numTypes = 0;
   foreach( $alloptions as $n => $v ) {
@@ -78,11 +74,24 @@ function cornholio_page() {
         'description' => getOptField($uv, CORNHOLIO_TYPE_DESC),
 
       );
-      echo "<p>" . $args['label'] . " &mdash; " . $args['description'] . " &mdash; " . $post_type . "</p>";
+      $admin_link = admin_url() . "admin.php?page=" . $post_type;
+      echo "<p><a href='$admin_link'>" . $args['label'] . "</a> &mdash; " . $args['description'] . " &mdash; " . $post_type . "</p>";
     }
   }
   if (0 == $numTypes) echo "<p>No custom post types so far</p>";
   // display links to every post type
+  $AddNew = __("Add New");
+  echo "<hr>\n" .
+       "<div class='wrap'>\n" .
+       "   <form method='post' action='options.php'>\n";
+               /* 'option_group' must match 'option_group' from register_setting call */
+               settings_fields( CORNHOLIO_OPTION_NEW_SECTION );
+               do_settings_sections( CORNHOLIO_OPTION_PAGE_ID );
+  echo "        <p class='submit'>\n" .
+       "             <input name='submit' type='submit' id='submit' class='button-primary' value='" . __("Add New") . "' />\n" .
+       "        </p>\n" .
+       "   </form>\n" .
+       "</div>\n";
 }
 
 function corn_field_shortcode( $atts ) {
@@ -94,8 +103,12 @@ function corn_cob_shortcode( $atts, $content = null ) {
 }
 
 function cornup_admin_button() {
-  add_options_page( CORNHOLIO_OPTION_TITLE, CORNHOLIO, 'manage_options', CORNHOLIO_OPTION_PAGE_ID, 'show_corn_options');
-  add_menu_page( CORNHOLIO, CORNHOLIO, 'edit_posts', 'cornholio', 'cornholio_page', plugin_dir_url( __FILE__ ) . '/CornIcon.png', 21);
+//  add_options_page( CORNHOLIO_OPTION_TITLE, CORNHOLIO, 'manage_options', CORNHOLIO_OPTION_PAGE_ID, 'show_corn_options');
+  add_menu_page( CORNHOLIO_OPTION_TITLE, CORNHOLIO, 'edit_posts', CORNHOLIO_LOWCASE, 'cornholio_page', plugin_dir_url( __FILE__ ) . '/CornIcon.svg', 21);
+  $cpts = getCustomTypeDefinitions();
+  foreach( $cpts as $n => $v ) {
+    add_submenu_page( CORNHOLIO_LOWCASE, $v[CORNHOLIO_TYPE_LABEL], $v[CORNHOLIO_TYPE_LABEL], 'manage_options', $v[CORNHOLIO_TYPE_NAME], 'show_corn_options' );
+  }
   // add submenus to Cornholio menu
 }
 
@@ -104,6 +117,20 @@ function getOptField($option, $fieldname) {
   else return false; //TODO: add debug log error here
 }
 
+function getCustomTypeDefinitions() { // load options and get all cornholio post types from options
+  $res = array();
+
+  $alloptions = wp_load_alloptions();
+  foreach( $alloptions as $n => $v ) {
+    if (0 === stripos($n, CORNHOLIO_OPTIONS_TYPE_PREFIX)) { // find every cornholio custom post type
+      $uv = $v;
+      if (is_serialized($v)) $uv = maybe_unserialize($v);
+      $res[$n] = $uv;
+    }
+  }
+
+  return $res;
+}
 
 function cornup_post_types() {
   $newType = get_option( CORNHOLIO_OPTION_NEW_NAME, null );
@@ -120,27 +147,22 @@ function cornup_post_types() {
     delete_option( CORNHOLIO_NEW_SECTION_NAME );
   }
 
-  $alloptions = wp_load_alloptions();
-  foreach( $alloptions as $n => $v ) {
-    if (0 === stripos($n, CORNHOLIO_OPTIONS_TYPE_PREFIX)) { // find every cornholio custom post type
-      $uv = $v;
-      if (is_serialized($v)) $uv = maybe_unserialize($v);
-//      echo strval($n) . " = " . var_dump($uv) . "<br>";
-      $post_type = $uv[CORNHOLIO_TYPE_NAME];    // take the type name
+  $cpts = getCustomTypeDefinitions();
+  foreach( $cpts as $n => $v ) {
+      $post_type = $v[CORNHOLIO_TYPE_NAME];    // take the type name
       $args = array(
-        'label' => $uv[CORNHOLIO_TYPE_LABEL],
-        'description' => $uv[CORNHOLIO_TYPE_DESC],
+        'label' => $v[CORNHOLIO_TYPE_LABEL],
+        'description' => $v[CORNHOLIO_TYPE_DESC],
         'public' => true,
         'show_in_menu' => false,
 
       );
       register_post_type( $post_type, $args );
-    }
   }
 }
 
 function cornholio_show_new_section() {
-  echo "<p>Add new custom type</p>";
+  echo "<p>".__("Set the name for the new custom post type. The name should be plural, e.g. &quot;<b>Portfolios</b>&quot;")."</p>";
 }
 
 function cornholio_show_new_name() {
@@ -155,8 +177,9 @@ function cornup_settings_page() {
 
 add_action( 'init', 'cornup_post_types' );
 add_action( 'admin_init', 'cornup_settings_page' );
-add_action( 'network_admin_menu', 'cornup_network_admin' );
+//add_action( 'network_admin_menu', 'cornup_network_admin' );
 add_action( 'admin_menu', 'cornup_admin_button' );
+
 add_shortcode( 'cornfield', 'corn_field_shortcode' );
 add_shortcode( 'corncob', 'corn_cob_shortcode' );
 
